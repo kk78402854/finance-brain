@@ -8,6 +8,24 @@ Python 3.12 · LangGraph · FastAPI · Milvus · BGE-M3 · MongoDB · MinIO
 
 Finance-Brain 是一套面向金融场景（货币政策报告、基金产品概要、风险揭示书等）的检索增强生成（RAG）系统，包含**数据导入**与**智能问答**两条 LangGraph 编排的处理链路，提供 DeepSeek 风格的 Web 交互界面，支持多轮会话、流式输出与回答配图。
 
+## 页面展示
+
+### 智能问答
+
+![RAG 问答效果](doc/images/chat-answer.png)
+
+会话侧栏支持历史记录搜索与日期分组；回答基于本地知识库检索生成，检索进度实时可见。
+
+![欢迎界面](doc/images/chat-welcome.png)
+
+新对话提供分类建议问题，一键发起提问。
+
+### 数据导入控制台
+
+![导入控制台](doc/images/import-console.png)
+
+支持 MD / PDF / DOCX / DOC 拖拽批量上传，PDF 经 MinerU 云端解析，任务状态实时追踪。
+
 ## 系统架构
 
 ### 数据导入链路（端口 8003）
