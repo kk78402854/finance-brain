@@ -3,9 +3,13 @@
     @Time:2026/10/19
     @DESC:金融智库-文件导入服务（FastAPI + LangGraph 后台任务）
 """
+import sys
 import uuid
 from datetime import datetime
 from pathlib import Path
+
+# 将项目根目录注入 sys.path，保证 `python api/file_import_service.py` 直接启动时能找到本地包
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import uvicorn
 from fastapi import FastAPI, UploadFile, BackgroundTasks

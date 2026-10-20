@@ -4,8 +4,13 @@
     @DESC:金融知识库查询服务
 """
 import json
+import sys
 from datetime import datetime
+from pathlib import Path
 from typing import Any
+
+# 将项目根目录注入 sys.path，保证 `python api/query_service.py` 直接启动时能找到本地包
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import uvicorn
 from fastapi import FastAPI, BackgroundTasks
