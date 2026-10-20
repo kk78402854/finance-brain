@@ -20,7 +20,7 @@ from starlette.responses import StreamingResponse, FileResponse
 
 from processor.query_processor.main_graph import query_app
 from processor.query_processor.state import create_query_default_state
-from utils.clients.mongo_history_utils import get_recent_messages, clear_history
+from utils.clients.mongo_history_utils import get_recent_messages, clear_history, get_history_mongo_tool
 from utils.path_util import PROJECT_ROOT
 from common.logging.logger import logger
 from utils.sse_utils import sse_generator, push_to_session, SSEEvent, create_sse_queue
@@ -180,5 +180,41 @@ def clear_chat_history(session_id:str):
     deleted_count = clear_history(session_id)
     logger.info(f"已经清空:{session_id}对应的聊天记录,删除的数量为:{deleted_count}")
     return {"message": "History cleared", "deleted_count": deleted_count}
+
+# 会话列表接口   /sessions --- get
+# 供前端侧栏展示历史会话：按最后活跃时间倒序，标题取首条消息
+@app.get("/sessions")
+def list_sessions():
+    try:
+        mongo_tool = get_history_mongo_tool()
+        # 先按时间正序再分组，保证 $first 拿到的是会话中最早的一条消息
+        pipeline = [
+            {"$sort": {"ts": 1}},
+            {"$group": {
+                "_id": "$session_id",
+                "first_text": {"$first": "$text"},
+                "first_ts": {"$min": "$ts"},
+                "last_ts": {"$max": "$ts"},
+                "message_count": {"$sum": 1},
+            }},
+            {"$sort": {"last_ts": -1}},
+            {"$limit": 200},
+        ]
+        sessions = []
+        for doc in mongo_tool.chat_message.aggregate(pipeline):
+            title = str(doc.get("first_text") or "新对话").strip()
+            sessions.append({
+                "session_id": doc["_id"],
+                "title": title[:40],
+                "first_ts": doc.get("first_ts"),
+                "last_ts": doc.get("last_ts"),
+                "message_count": doc.get("message_count", 0),
+            })
+        logger.info(f"获取会话列表成功,共{len(sessions)}个会话")
+        return {"sessions": sessions}
+    except Exception as e:
+        logger.error(f"获取会话列表失败: {e}")
+        return {"sessions": []}
+
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8002)

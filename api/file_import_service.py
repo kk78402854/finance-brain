@@ -34,6 +34,12 @@ app.add_middleware(
 )
 
 
+# 健康检查接口    /health
+@app.get("/health")
+def check_health():
+    """服务健康检查，供前端展示导入服务连接状态"""
+    return {"ok": True}
+
 # 路由：GET /import.html
 # 功能：返回导入页面
 @app.get("/import.html")
