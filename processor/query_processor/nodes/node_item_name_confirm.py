@@ -255,9 +255,9 @@ def step_6_change_state_property(state, rewritten_query, confirmed_option_dict):
     根据 step_5 的确认/可选结果更新图状态 state。
 
     支持 4 种业务场景：
-        1. 金融产品推荐场景：用户未指定具体金融产品（如"推荐悬疑小说"），item_names 为空，
+        1. 金融产品推荐场景：用户未指定具体金融产品（如"推荐一只稳健型基金"），item_names 为空，
            进入全局检索，在所有金融产品切片中匹配相关内容。
-        2. 金融产品详情场景：用户指定了具体金融产品，item_names 非空，在该书切片内检索。
+        2. 金融产品详情场景：用户指定了具体金融产品，item_names 非空，在该产品切片内检索。
         3. 内容检索场景：同详情场景，在指定金融产品内检索内容。
         4. 金融笔记场景：同详情场景，在指定金融产品内检索笔记/评论。
 
@@ -270,7 +270,7 @@ def step_6_change_state_property(state, rewritten_query, confirmed_option_dict):
     _greeting_pattern = re.compile(r"^(你好|您好|嗨|hi|hello|在吗|在不在|哈喽|哈喽啊|嘿)[\s!！。\.~～]*$", re.IGNORECASE)
     _original_query = state.get("original_query", "").strip()
     if _greeting_pattern.match(_original_query):
-        state["answer"] = "你好！我是金融知识库助手，可以问我关于金融产品的推荐、详情、内容或金融笔记，比如「推荐一本悬疑小说」「三体讲了什么」。"
+        state["answer"] = "你好！我是金融智库助手，可以问我关于金融产品的推荐、详情、内容或金融资讯，比如「易方达智造优势混合基金主要投资什么方向」「净值型理财和保本理财有什么区别」「基金赎回后资金多久到账」。"
         logger.info(f"检测到问候语:{_original_query},直接回复!")
         return
 
