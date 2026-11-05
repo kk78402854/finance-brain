@@ -94,22 +94,40 @@ def step_4_create_answer_prompt(reranked_docs, history_list, item_names, rewritt
     return answer_prompt_text
 
 
+CTX_META_TAG = "<ctx-meta>"
+CTX_META_RE = re.compile(r"<ctx-meta>(.*?)</ctx-meta>", flags=re.DOTALL)
+
+
+def _partial_tag_len(text: str) -> int:
+    """text 末尾若是 <ctx-meta> 的残缺前缀（如 "<ctx"），返回前缀长度——流式时先扣住不推送，防止半截标签泄漏到前端"""
+    for k in range(min(len(text), len(CTX_META_TAG) - 1), 0, -1):
+        if text.endswith(CTX_META_TAG[:k]):
+            return k
+    return 0
+
+
 @step_log("step_5_call_llm_create_answer")
 def step_5_call_llm_create_answer(answer_prompt, is_stream, session_id):
     llm_model = get_llm_client()
 
     answer: str = ""
     if is_stream:
+        pushed_len = 0  # 已推送给前端的正文长度
         for chunk in llm_model.stream(answer_prompt):
-            chunk_str = chunk.content
-
-            push_to_session(
-                session_id=session_id,
-                event=SSEEvent.DELTA,
-                data={"delta": chunk_str}
-            )
-
-            answer += chunk_str
+            answer += chunk.content
+            # 标签感知推送：正文（<ctx-meta> 之前）走 DELTA 流，元信息块由前端在 final 事件统一渲染
+            meta_pos = answer.find(CTX_META_TAG)
+            if meta_pos != -1:
+                safe_end = meta_pos
+            else:
+                safe_end = len(answer) - _partial_tag_len(answer)
+            if safe_end > pushed_len:
+                push_to_session(
+                    session_id=session_id,
+                    event=SSEEvent.DELTA,
+                    data={"delta": answer[pushed_len:safe_end]}
+                )
+                pushed_len = safe_end
     else:
         response = llm_model.invoke(answer_prompt)
         answer = response.content
@@ -127,14 +145,20 @@ def step_5_5_apply_compliance_guardrail(answer, question, is_stream, session_id)
     """
     guarded_answer, appended_text = apply_compliance_guardrail(answer, question)
     if appended_text:
-        logger.info(f"合规护栏已生效，追加内容长度: {len(appended_text)}")
-        if is_stream:
-            push_to_session(
-                session_id=session_id,
-                event=SSEEvent.DELTA,
-                data={"delta": appended_text}
-            )
-    return guarded_answer
+        logger.info(f"合规护栏已生效，追加内容转存 answer_meta，长度: {len(appended_text)}")
+    return guarded_answer, appended_text.strip()
+
+
+@step_log("step_5_6_split_answer_meta")
+def step_5_6_split_answer_meta(raw_answer: str):
+    """
+    步骤 5.6: 正文与元信息分离
+    剥离 LLM 输出末尾的 <ctx-meta> 块（来源/时效），
+    answer 只留纯净正文——这是 faithfulness / answer_correctness 评估口径的关键。
+    """
+    metas = [m.strip() for m in CTX_META_RE.findall(raw_answer) if m.strip()]
+    clean_answer = CTX_META_RE.sub("", raw_answer).strip()
+    return clean_answer, "\n".join(metas)
 
 
 # 占位/示例域名黑名单：这些域名下的图片 URL 一律视为编造，不展示
@@ -181,7 +205,8 @@ def step_7_save_assistant_message(state):
         text=state.get("answer"),
         rewritten_query=state.get("rewritten_query"),
         item_names=state.get("item_names"),
-        image_urls=state.get("image_urls")
+        image_urls=state.get("image_urls"),
+        answer_meta=state.get("answer_meta")
     )
 
 
@@ -196,11 +221,14 @@ def node_answer_output(state: QueryGraphState):
         reranked_docs, session_id, item_names, rewritten_query, is_stream = step_2_validate_and_get_data(state)
         history_list = step_3_get_history_by_session_id(session_id)
         answer_prompt: str = step_4_create_answer_prompt(reranked_docs, history_list, item_names, rewritten_query)
-        answer: str = step_5_call_llm_create_answer(answer_prompt, is_stream, session_id)
-        # 合规护栏：禁用词更正 + 强制风险提示（流式场景同步推送追加内容）
-        answer: str = step_5_5_apply_compliance_guardrail(answer, rewritten_query, is_stream, session_id)
+        raw_answer: str = step_5_call_llm_create_answer(answer_prompt, is_stream, session_id)
+        # 正文与元信息分离：<ctx-meta>（来源/时效）剥离出 answer
+        clean_answer, sources_meta = step_5_6_split_answer_meta(raw_answer)
+        # 合规护栏：禁用词更正 + 强制风险提示（合规文本转存 answer_meta，不进正文）
+        answer, compliance_meta = step_5_5_apply_compliance_guardrail(clean_answer, rewritten_query, is_stream, session_id)
         image_urls: list[str] = step_6_extract_chunk_and_url_image(reranked_docs)
         state["answer"] = answer
+        state["answer_meta"] = {"sources": sources_meta, "compliance": compliance_meta}
         state["image_urls"] = image_urls
 
     step_7_save_assistant_message(state)

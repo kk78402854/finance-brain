@@ -486,6 +486,20 @@ details.progress li { padding: 2px 0; font-family: var(--mono); }
 }
 .answer-images a { font-size: 11px; color: var(--text-3); word-break: break-all; }
 
+/* 答案元信息块：来源 / 合规提示（与正文分离的小字区块） */
+.answer-meta { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+.answer-meta-item {
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: var(--bg-2, rgba(0,0,0,.03));
+    border: 1px dashed var(--border);
+    font-size: 11.5px;
+    color: var(--text-3);
+}
+.answer-meta-head { font-weight: 600; margin-bottom: 4px; }
+.answer-meta-body :is(p, ul, ol) { margin: 2px 0; }
+.answer-meta-body hr { display: none; }
+
 @media (max-width: 760px) {
     .hero-cards { grid-template-columns: 1fr; }
     .chat-title { display: none; }
@@ -989,9 +1003,9 @@ details.progress li { padding: 2px 0; font-family: var(--mono); }
         return row;
     }
 
-    function addBotHistoryMsg(text, ts, imageUrls) {
+    function addBotHistoryMsg(text, ts, imageUrls, answerMeta) {
         const row = addBotMsg(ts);
-        finalizeBotAnswer(row, text, '', imageUrls);
+        finalizeBotAnswer(row, text, '', imageUrls, answerMeta);
     }
 
     function renderProgress(botMsgEl, doneList, runningList, status){
@@ -1015,7 +1029,37 @@ details.progress li { padding: 2px 0; font-family: var(--mono); }
         }
     }
 
-    function finalizeBotAnswer(botMsgEl, answer, error, imageUrls){
+    // 渲染答案元信息块（来源 / 合规提示），与正文分离展示
+    function renderAnswerMeta(body, answerMeta){
+        const meta = answerMeta || {};
+        const parts = [];
+        if(meta.sources && String(meta.sources).trim()){
+            parts.push({ icon: '📎', label: '来源', text: String(meta.sources) });
+        }
+        if(meta.compliance && String(meta.compliance).trim()){
+            parts.push({ icon: '⚠️', label: '合规提示', text: String(meta.compliance) });
+        }
+        if(!parts.length) return;
+        body.querySelector('.answer-meta')?.remove();
+        const wrap = document.createElement('div');
+        wrap.className = 'answer-meta';
+        for(const p of parts){
+            const block = document.createElement('div');
+            block.className = 'answer-meta-item';
+            const head = document.createElement('div');
+            head.className = 'answer-meta-head';
+            head.textContent = `${p.icon} ${p.label}`;
+            const bd = document.createElement('div');
+            bd.className = 'answer-meta-body';
+            bd.innerHTML = md.render(p.text);
+            block.appendChild(head);
+            block.appendChild(bd);
+            wrap.appendChild(block);
+        }
+        body.appendChild(wrap);
+    }
+
+    function finalizeBotAnswer(botMsgEl, answer, error, imageUrls, answerMeta){
         const typing = botMsgEl.querySelector('.typing');
         if(typing) typing.remove();
         const progress = botMsgEl.querySelector('details.progress');
@@ -1035,6 +1079,7 @@ details.progress li { padding: 2px 0; font-family: var(--mono); }
             answerEl.innerHTML = `<p style="color:var(--danger)">抱歉，本次处理失败：${escapeHtml(err)}</p>`;
         }else{
             renderAnswerWithImages(answerEl, answer || '', imageUrls || []);
+            renderAnswerMeta(body, answerMeta);
         }
 
         if(progress){
@@ -1196,7 +1241,7 @@ details.progress li { padding: 2px 0; font-family: var(--mono); }
                     if(!firstUser) firstUser = item.text || '';
                     addUserMsg(item.text || '', ts);
                 }else{
-                    addBotHistoryMsg(item.text || '', ts, item.image_urls || []);
+                    addBotHistoryMsg(item.text || '', ts, item.image_urls || [], item.answer_meta);
                 }
             }
             updateTitleFromHistory(firstUser);
@@ -1231,7 +1276,7 @@ details.progress li { padding: 2px 0; font-family: var(--mono); }
 
             if(!isStream){
                 renderProgress(botMsgEl, data.done_list || [], [], 'completed');
-                finalizeBotAnswer(botMsgEl, data.answer, data.error, data.image_urls || []);
+                finalizeBotAnswer(botMsgEl, data.answer, data.error, data.image_urls || [], data.answer_meta);
                 sendBtn.disabled = false;
                 loadSessions();
                 return;
@@ -1277,7 +1322,7 @@ details.progress li { padding: 2px 0; font-family: var(--mono); }
                     const d = JSON.parse(e.data || '{}');
                     const finalText = (d && typeof d.answer === 'string' && d.answer.trim().length > 0)
                         ? d.answer : (rawAnswerText || answerEl.textContent || '');
-                    finalizeBotAnswer(botMsgEl, finalText, '', d.image_urls || []);
+                    finalizeBotAnswer(botMsgEl, finalText, '', d.image_urls || [], d ? d.answer_meta : null);
                 }catch(_){}
                 es.close();
                 sendBtn.disabled = false;

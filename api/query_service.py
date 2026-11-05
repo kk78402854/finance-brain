@@ -90,6 +90,7 @@ def run_query_graph(session_id: str, is_stream: bool,user_query:str):
                 SSEEvent.FINAL,
                 {
                     "answer": final_state.get("answer"),
+                    "answer_meta": final_state.get("answer_meta"),
                     "status": "completed",
                     "image_urls": final_state.get("image_urls")
                 }
@@ -139,6 +140,7 @@ def query(query_request:QueryRequest,background_tasks:BackgroundTasks):
             "session_id": session_id,
             "message": f"{session_id}已经完成问题解析!",
             "answer": final_state.get("answer"),
+            "answer_meta": final_state.get("answer_meta"),
             "done_list": done_list,
             "image_urls": final_state.get("image_urls", [])
         }
@@ -168,6 +170,7 @@ def history(session_id:str):
             "rewritten_query": r.get("rewritten_query", ""),
             "item_names": r.get("item_names", []),
             "image_urls": r.get("image_urls", []),
+            "answer_meta": r.get("answer_meta"),
             "ts": r.get("ts")
         })
     return {

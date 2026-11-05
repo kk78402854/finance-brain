@@ -111,7 +111,8 @@ def save_chat_message(
         rewritten_query: str = "",
         item_names: List[str] = None,
         image_urls: List[str] = None,
-        message_id: str = None
+        message_id: str = None,
+        answer_meta: Dict[str, Any] = None
 ) -> str:
     """
     写入/更新单条会话记录到MongoDB
@@ -123,6 +124,7 @@ def save_chat_message(
     :param item_names: 关联的商品名称列表（可选，支持多商品，默认None）
     :param image_urls: 关联的图片URL列表（可选，默认None）
     :param message_id: 记录主键ID（可选，有值则更新，无值则新增）
+    :param answer_meta: 答案元信息（可选，assistant 消息的来源/合规提示，与正文分离存储）
     :return: 插入/更新的记录唯一标识（新增返回ObjectId字符串，更新返回传入的message_id）
     """
     # 生成当前时间的时间戳（秒级），用于记录消息的创建时间，后续用于排序和查询
@@ -132,10 +134,11 @@ def save_chat_message(
     document = {
         "session_id": session_id,  # 会话ID，关联维度
         "role": role,  # 消息角色
-        "text": text,  # 消息内容
+        "text": text,  # 消息内容（assistant 为纯净正文，不含来源/合规元信息）
         "rewritten_query": rewritten_query or "",  # 重写查询，空值处理为空字符串
         "item_names": item_names,  # 关联商品名称列表
         "image_urls": image_urls,  # 关联图片URL列表
+        "answer_meta": answer_meta,  # 答案元信息（来源/合规提示）
         "ts": ts  # 时间戳，排序和时间筛选维度
     }
 

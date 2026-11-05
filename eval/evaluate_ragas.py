@@ -21,6 +21,7 @@ import re
 import sys
 import types
 import uuid
+from datetime import datetime
 from pathlib import Path
 from typing import List
 
@@ -60,7 +61,8 @@ from ragas.metrics import (  # noqa: E402  # 0.4 提示未来迁往 metrics.coll
     faithfulness,
 )
 
-from common.logging.logger import logger  # noqa: E402
+# 注意：评估脚本不引入项目 logger（loguru 文件 sink 在后台任务环境下句柄异常，
+# 且评估是独立工具，print 到 stdout 即可）
 from processor.query_processor.main_graph import query_app  # noqa: E402
 from processor.query_processor.state import create_query_default_state  # noqa: E402
 from utils.lm.lm_utils import get_llm_client  # noqa: E402
@@ -120,8 +122,11 @@ def step_2_load_test_samples_from_csv(csv_path: str):
 # Step 3: 跑 RAG 全链路，采集 answer 与 contexts
 # ============================================================
 def strip_image_suffix_for_eval(text: str) -> str:
-    """去掉答案中的 markdown 图片标记，避免干扰 LLM 裁判与 embedding"""
-    return re.sub(r"!\[.*?\]\(.*?\)", "", text).strip()
+    """去掉答案中的 markdown 图片标记与 <ctx-meta> 元信息块，避免干扰 LLM 裁判与 embedding。
+    （后端 node_answer_output 已做正文/元信息分离，此处为双保险——应对提示词未被执行的输出）"""
+    text = re.sub(r"!\[.*?\]\(.*?\)", "", text)
+    text = re.sub(r"<ctx-meta>.*?</ctx-meta>", "", text, flags=re.DOTALL)
+    return text.strip()
 
 
 def step_3_run_pipeline(questions):
@@ -142,7 +147,7 @@ def step_3_run_pipeline(questions):
             # 注意：文档正文字段是 text（与 node_answer_output 的 step_4 一致）
             docs = [d.get("text", "") for d in result.get("reranked_docs", [])]
         except Exception as e:
-            logger.error(f"[{i}/{len(questions)}] 流水线失败：{question[:30]} -> {e}")
+            print(f"[{i}/{len(questions)}] 流水线失败：{question[:30]} -> {e}")
             ans, docs = "", []
 
         answers.append(strip_image_suffix_for_eval(ans))
@@ -180,6 +185,16 @@ def step_5_run_ragas_evaluation(dataset, metrics, llm, embeddings):
 # ============================================================
 # Step 6: 导出结果 + 筛 Bad Cases（answer_correctness < 阈值 或 NaN）
 # ============================================================
+def safe_to_csv(df, path):
+    """CSV 被占用（Excel/WPS 打开时的 Windows 文件锁）时改写 _new 后缀文件，避免整轮评估白跑"""
+    try:
+        df.to_csv(path, index=False, encoding="utf-8-sig")
+    except PermissionError:
+        alt = path.with_name(path.stem + "_new" + path.suffix)
+        print(f"[警告] {path.name} 被占用（请关闭 Excel/WPS 后重跑以覆盖），本次结果改写入 {alt.name}")
+        df.to_csv(alt, index=False, encoding="utf-8-sig")
+
+
 def step_6_export_results_and_bad_cases(results, metrics, threshold: float):
     df = results.to_pandas()
     metric_names = [m.name for m in metrics]
@@ -189,14 +204,24 @@ def step_6_export_results_and_bad_cases(results, metrics, threshold: float):
     for m in metric_names:
         if m in df.columns:
             avg_row[m] = pd.to_numeric(df[m], errors="coerce").mean()
-    pd.concat([df, pd.DataFrame([avg_row])], ignore_index=True).to_csv(
-        EVAL_DOC_DIR / "eval_results.csv", index=False, encoding="utf-8-sig")
+    # 兜底：先把完整分数打到 stdout —— 即使 CSV 写盘失败，结果也能从日志恢复
+    metric_cols = [m for m in metric_names if m in df.columns]
+    print("\n===== 逐条分数 =====")
+    print(df[metric_cols].to_string())
+    print("\n===== 平均分 =====")
+    for m in metric_cols:
+        print(f"  {m}: {avg_row[m]:.4f}")
+
+    # 文件名带时间戳：每轮评估独立存档，天然保留优化前后历史版本，也避免 Excel 锁定固定名文件
+    ts = datetime.now().strftime("%Y%m%d_%H%M")
+    safe_to_csv(pd.concat([df, pd.DataFrame([avg_row])], ignore_index=True),
+                EVAL_DOC_DIR / f"eval_results_{ts}.csv")
 
     bad_case_metric = "answer_correctness"
     if bad_case_metric in df.columns:
         scores = pd.to_numeric(df[bad_case_metric], errors="coerce")
         bad_df = df[scores.lt(threshold) | scores.isna()]
-        bad_df.to_csv(EVAL_DOC_DIR / "bad_cases.csv", index=False, encoding="utf-8-sig")
+        safe_to_csv(bad_df, EVAL_DOC_DIR / f"bad_cases_{ts}.csv")
 
     return df, avg_row
 

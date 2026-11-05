@@ -79,9 +79,9 @@ def apply_compliance_guardrail(answer: str, question: str) -> tuple[str, str]:
         appended_parts.append(RISK_DISCLAIMER)
 
     appended_text = "".join(appended_parts)
-    if appended_text:
-        return answer + appended_text, appended_text
-    return answer, ""
+    # 正文与合规文本分离返回：调用方（node_answer_output）将合规文本转存 answer_meta，
+    # 由前端独立渲染，保持 answer 正文纯净（RAGAS faithfulness 评估口径的关键）。
+    return answer, appended_text
 
 
 if __name__ == "__main__":

@@ -27,7 +27,8 @@ class QueryGraphState(TypedDict):
 
     # 生成过程中的数据
     prompt: str  # 组装好的 Prompt
-    answer: str  # 最终生成的答案
+    answer: str  # 最终生成的答案（纯净正文，不含来源/合规元信息）
+    answer_meta: dict  # 答案元信息（来源、合规提示），与正文分离以保持可评估性
 
     # 辅助信息
     item_names: List[str]  # 提取出的主体名
@@ -50,6 +51,7 @@ query_graph_default_state: QueryGraphState = {
     "reranked_docs": [],
     "prompt": "",
     "answer": "",
+    "answer_meta": None,
     "item_names": [],
     "rewritten_query": "",
     "history": [],
