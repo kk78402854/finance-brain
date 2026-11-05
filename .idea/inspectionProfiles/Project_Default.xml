@@ -1,0 +1,39 @@
+<component name="InspectionProjectProfileManager">
+  <profile version="1.0">
+    <option name="myName" value="Project Default" />
+    <inspection_tool class="PyPackageRequirementsInspection" enabled="true" level="WARNING" enabled_by_default="true">
+      <option name="ignoredPackages">
+        <list>
+          <option value="datasets" />
+          <option value="fastapi" />
+          <option value="flagembedding" />
+          <option value="grandalf" />
+          <option value="langchain" />
+          <option value="langchain-community" />
+          <option value="langchain-openai" />
+          <option value="langgraph" />
+          <option value="loguru" />
+          <option value="magic-pdf" />
+          <option value="mineru-kie-sdk" />
+          <option value="minio" />
+          <option value="modelscope" />
+          <option value="numpy" />
+          <option value="openai-agents" />
+          <option value="pandas" />
+          <option value="pymilvus" />
+          <option value="pymilvus-model" />
+          <option value="pymongo" />
+          <option value="python-dotenv" />
+          <option value="python-multipart" />
+          <option value="regex" />
+          <option value="requests" />
+          <option value="torch" />
+          <option value="torchaudio" />
+          <option value="torchvision" />
+          <option value="transformers" />
+          <option value="uvicorn" />
+        </list>
+      </option>
+    </inspection_tool>
+  </profile>
+</component>
