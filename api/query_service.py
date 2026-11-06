@@ -5,6 +5,7 @@
 """
 import json
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -28,9 +29,13 @@ from fastapi import Request
 
 from utils.task_utils import get_done_task_list, update_task_status, TASK_STATUS_PROCESSING, TASK_STATUS_COMPLETED, \
     TASK_STATUS_FAILED, clear_task
+from utils.langfuse_utils import get_langfuse_client, langchain_trace_config, trace_attributes
 
 # 创建FastAPI应用实例
 app = FastAPI()
+
+# 初始化 Langfuse 追踪客户端（未配置密钥时只告警，不影响服务启动）
+get_langfuse_client()
 
 # 跨域的配置
 app.add_middleware(
@@ -79,9 +84,19 @@ def run_query_graph(session_id: str, is_stream: bool,user_query:str):
             original_query = user_query
         )
         logger.info(f"查询图开始执行,传入参数:\n{json.dumps(state, indent=4, ensure_ascii=False)}")
-        # 调用编译后的图对象
-        final_state = query_app.invoke(state)
-        logger.info(f"查询图执行结束,返回结果:\n{json.dumps(final_state, indent=4, ensure_ascii=False)}")
+        # 调用编译后的图对象（挂载 Langfuse 回调，自动记录各节点与模型调用的耗时）
+        start_ts = time.perf_counter()
+        with trace_attributes(
+                trace_name="finance-query-api",
+                session_id=session_id,
+                tags=["finance", "web-query"],
+                metadata={"user_query": user_query, "is_stream": is_stream},
+        ):
+            final_state = query_app.invoke(state, config=langchain_trace_config())
+        logger.info(
+            f"查询图执行结束,耗时:{int((time.perf_counter() - start_ts) * 1000)}ms,"
+            f"返回结果:\n{json.dumps(final_state, indent=4, ensure_ascii=False)}"
+        )
         # 更新全局状态为已完成
         update_task_status(session_id, TASK_STATUS_COMPLETED, is_stream)
         if is_stream:

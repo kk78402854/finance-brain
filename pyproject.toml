@@ -33,6 +33,7 @@ dependencies = [
     "python-docx>=1.1.2",
     "pywin32>=306; sys_platform == 'win32'",
     "ragas>=0.4.3",
+    "langfuse>=5.2.0",
 ]
 
 # 全局镜像源配置

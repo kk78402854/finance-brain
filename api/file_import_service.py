@@ -22,9 +22,13 @@ from utils.path_util import PROJECT_ROOT
 from utils.task_utils import get_running_task_list, get_done_task_list, get_task_status, add_running_task, \
     add_done_task, update_task_status, TASK_STATUS_PROCESSING, TASK_STATUS_COMPLETED, TASK_STATUS_FAILED
 from common.logging.logger import logger
+from utils.langfuse_utils import get_langfuse_client, langchain_trace_config, trace_attributes
 
 # 创建 FastAPI 应用实例
 app = FastAPI()
+
+# 初始化 Langfuse 追踪客户端（未配置密钥时只告警，不影响服务启动）
+get_langfuse_client()
 # 跨域配置
 app.add_middleware(
     CORSMiddleware,
@@ -74,9 +78,16 @@ def run_graph_task(task_id: str, local_dir: str, local_file_path: str):
         init_state["local_file_path"] = local_file_path
 
         # 通过 LangGraph 应用流式执行，stream_mode="updates" 表示每次返回节点更新事件
-        for event in kb_import_app.stream(init_state, stream_mode="updates"):
-            for node_name, node_result in event.items():
-                logger.info(f"[{task_id}] LangGraph 节点执行完成：{node_name}")
+        # 挂载 Langfuse 回调，记录导入链路中 LLM / VLM 节点耗时
+        with trace_attributes(
+                trace_name="finance-import-api",
+                session_id=task_id,
+                tags=["finance", "web-import"],
+                metadata={"file": Path(local_file_path).name},
+        ):
+            for event in kb_import_app.stream(init_state, stream_mode="updates", config=langchain_trace_config()):
+                for node_name, node_result in event.items():
+                    logger.info(f"[{task_id}] LangGraph 节点执行完成：{node_name}")
 
         # 全流程执行成功，更新全局任务状态为"已完成"
         update_task_status(task_id, TASK_STATUS_COMPLETED)
