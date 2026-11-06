@@ -64,7 +64,7 @@ flowchart LR
 | **MongoDB** | 会话与消息存储（`finance_kb.chat_message`），支撑多轮上下文、会话列表（聚合管道 `$group + $first/$min/$max`）与历史回放 |
 | **MinIO** | 对象存储。PDF 中抽取的图表上传后返回 URL，供回答配图与前端展示 |
 | **BGE-M3** | 本地向量模型，单模型同时产出稠密与稀疏向量；稀疏通道负责基金代码、政策文号这类精确 token |
-| **bge-reranker-large** | 本地精排模型，对 RRF 融合后的候选逐对打分；当前为 CPU fp32 推理，是单请求最大耗时项（见第 6 节） |
+| **bge-reranker-large** | 本地精排模型，对 RRF 融合后的候选逐对打分；当前为 CPU fp32 推理，是单请求最大耗时项（见第 7 节） |
 | **Qwen（DashScope）** | `qwen-flash` 负责实体抽取、HyDE 改写、答案生成；`qwen-vl-plus` 负责图表理解 |
 | **MinerU（云端）** | PDF → Markdown，保留标题层级与图表位置 |
 | **Langfuse** | 链路追踪。按 trace 记录每个节点与每次 LLM 调用的耗时、token 与 metadata |
@@ -98,7 +98,8 @@ finance-brain/
 │   └── logging/                  # loguru 统一日志（控制台 + 文件，按天保留）
 ├── page/                         # 前端：chat.html / import.html（原生 HTML+JS，零构建）
 ├── eval/                         # 检索与回答评估脚本（含 RAGAS）
-├── perf_trace/                   # 链路追踪与压测产物（见第 6 节）
+├── docs/images/                  # README 界面截图（真实运行截图）
+├── perf_trace/                   # 链路追踪与压测产物（见第 7 节）
 └── pyproject.toml                # uv 依赖管理
 ```
 
@@ -181,11 +182,35 @@ python api/file_import_service.py    # 导入服务 → http://127.0.0.1:8003/im
 
 ---
 
-## 6. 可观测性与实测性能
+## 6. 界面预览
+
+以下截图来自本地真实运行的服务（`http://127.0.0.1:8002/chat.html`、`http://127.0.0.1:8003/import.html`），不是设计稿。
+
+### 6.1 对话首页
+
+![对话首页](docs/images/chat-welcome.png)
+
+左侧会话按日期分组、顶部显示 API 连通状态；右侧是四类示例问题（产品测算 / 知识科普 / 业务流程 / 公告资讯），底部可切换「流式输出」与清空会话。
+
+### 6.2 问答结果与检索进度
+
+![问答结果与检索进度](docs/images/chat-answer.png)
+
+提问「什么是私募基金」的实际输出：气泡上方可展开「检索与生成进度」，能看到各阶段状态与完成情况；回答按 Markdown 分段渲染，底部固定合规提示（内容来自本地知识库，不构成投资建议）。
+
+### 6.3 数据导入控制台
+
+![数据导入控制台](docs/images/import-console.png)
+
+导入服务 8003 的控制台：顶部为任务总数 / 处理中 / 已完成 / 失败四项统计，支持拖拽上传 MD、PDF、DOCX、DOC；底部标出完整处理链路（MinerU 解析 → 智能切片 → LLM 元数据抽取 → BGE-M3 混合向量化 → Milvus 入库）。
+
+---
+
+## 7. 可观测性与实测性能
 
 追踪与压测产物都在 `perf_trace/`，结论来自真实运行数据，不是估算。
 
-### 6.1 单请求耗时结构（Langfuse trace）
+### 7.1 单请求耗时结构（Langfuse trace）
 
 一条真实查询 trace（非流式）总耗时 **32.3 s**，16 个 span，3 次 `qwen-flash` 调用（输入 3404 / 输出 334 token）：
 
@@ -198,7 +223,7 @@ python api/file_import_service.py    # 导入服务 → http://127.0.0.1:8003/im
 
 详见 [trace 分析](perf_trace/链路追踪测评结果/trace_analysis_0dc6dc04.md)。
 
-### 6.2 延迟与并发（Locust）
+### 7.2 延迟与并发（Locust）
 
 | 场景 | 提交 | 首段答案 | 流式完整 | 非流式完整 |
 |---|---|---|---|---|
@@ -209,7 +234,7 @@ python api/file_import_service.py    # 导入服务 → http://127.0.0.1:8003/im
 
 详见 [压测结果分析](perf_trace/压力测试测评结果/压测结果分析_2026-11-06-18h53.md) 与 [压测运行说明](perf_trace/压测运行说明.md)。
 
-### 6.3 实测硬件前提（结论适用范围）
+### 7.3 实测硬件前提（结论适用范围）
 
 | 项 | 值 |
 |---|---|
@@ -222,7 +247,7 @@ python api/file_import_service.py    # 导入服务 → http://127.0.0.1:8003/im
 
 ---
 
-## 7. 已知局限与后续计划
+## 8. 已知局限与后续计划
 
 **已知局限（实测确认）**
 
@@ -241,6 +266,6 @@ python api/file_import_service.py    # 导入服务 → http://127.0.0.1:8003/im
 
 ---
 
-## 8. License
+## 9. License
 
 MIT
